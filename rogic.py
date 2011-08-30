@@ -178,3 +178,128 @@ class E_Disjunction(Expression):
 
     def evaluate(self, env):
         return self.lhs.evaluate(env) or self.rhs.evaluate(env)
+
+# Generator wrapper that allows peeking at the next value
+
+class Peekable(object):
+    def __init__(self, gen):
+        self._gen = gen
+        self._next = None
+    
+    def __iter__(self):
+        return self
+    
+    def has_next(self):
+        try:
+            self.peek()
+            return True
+        except StopIteration:
+            return False
+    
+    def next(self):
+        if self._next != None:
+            value = self._next[0]
+            self._next = None
+            return value
+        else:
+            return self._gen.next()
+    
+    def peek(self):
+        if not self._next:
+            self._next = (self._gen.next(),)
+        return self._next[0]
+
+# Parsing
+# See also grammar.txt
+
+def next_token(kind, tokens):
+    try:
+        token = tokens.peek()
+        if isinstance(token, kind):
+            tokens.next()
+            return token
+        else:
+            raise ParseError(u"expected %s, got %s" % (kind.__name__, type(token).__name__))
+    except StopIteration:
+        raise ParseError(u"expected %s, got EOF" % kind.__name__)
+
+def choice(parser_dict, tokens):
+    kinds = [k.__name__ for k in parser_dict.keys()]
+    try:
+        kind = type(tokens.peek())
+        if kind in parser_dict:
+            return parser_dict[kind](tokens)
+        else:
+            raise ParseError(u"expected %s, got %s" % (u"/".join(kinds), kind.__name__))
+    except StopIteration:
+        raise ParseError(u"expected %s, got EOF" % u"/".join(kinds))
+
+class ParseError(Exception):
+    pass
+
+def parse_expr(tokens):
+    lhs = choice({
+        T_Atom: parse_atom,
+        T_Negation: parse_negation,
+        T_GroupOpen: parse_group
+    }, tokens)
+    return parse_expr_suf(lhs, tokens)
+    
+def parse_atom(tokens):
+    atom = next_token(T_Atom, tokens)
+    return E_Atom(atom.name)
+
+def parse_expr_suf(lhs, tokens):
+    conj = parse_conjunction_suf(lhs, tokens)
+    if conj is not lhs:
+        return conj
+    return parse_disjunction_suf(lhs, tokens)
+
+def parse_negation(tokens):
+    next_token(T_Negation, tokens)
+    return E_Negation(parse_negation_sub(tokens))
+
+def parse_negation_sub(tokens):
+    return choice({
+        T_Atom: parse_atom,
+        T_Negation: parse_negation,
+        T_GroupOpen: parse_group
+    }, tokens)
+
+def parse_conjunction(tokens):
+    lhs = choice({
+        T_Atom: parse_atom,
+        T_Negation: parse_negation,
+        T_GroupOpen: parse_group
+    }, tokens)
+    return parse_conjunction_suf(lhs, tokens)
+
+def parse_conjunction_suf(lhs, tokens):
+    if tokens.has_next() and isinstance(tokens.peek(), T_Conjunction):
+        tokens.next()
+        rhs = parse_conjunction(tokens)
+        return E_Conjunction(lhs, rhs)
+    else:
+        return lhs
+
+def parse_disjunction(tokens):
+    lhs = choice({
+        T_Atom: parse_atom,
+        T_Negation: parse_negation,
+        T_GroupOpen: parse_group
+    }, tokens)
+    return parse_disjunction_suf(lhs, tokens)
+
+def parse_disjunction_suf(lhs, tokens):
+    if tokens.has_next() and isinstance(tokens.peek(), T_Disjunction):
+        tokens.next()
+        rhs = parse_disjunction(tokens)
+        return E_Disjunction(lhs, rhs)
+    else:
+        return lhs
+
+def parse_group(tokens):
+    next_token(T_GroupOpen, tokens)
+    subexpr = parse_expr(tokens)
+    next_token(T_GroupClose, tokens)
+    return subexpr
