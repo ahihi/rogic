@@ -1,14 +1,23 @@
 # -*- coding: utf-8 -*-
+# TODO:
+# better error reporting
+# report inconsequential undefined atoms?
+# more operators?
 
 import re
+import readline
+import sys
 
 ATOM_RE = re.compile(r"\w+", re.UNICODE) 
 WHITESPACE_RE = re.compile(r"\s+", re.UNICODE)
-NEGATION = u"!" #u"¬"
-CONJUNCTION = u"&" #u"∧"
-DISJUNCTION = u"|" #u"∨"
+NEGATION = u"¬"
+CONJUNCTION = u"∧"
+DISJUNCTION = u"∨"
 GROUP_OPEN = u"("
 GROUP_CLOSE = u")"
+
+TRUE = u"1"
+FALSE = u"0"
 
 # Some helpers
 
@@ -303,3 +312,61 @@ def parse_group(tokens):
     subexpr = parse_expr(tokens)
     next_token(T_GroupClose, tokens)
     return subexpr
+
+# Interpreter
+
+def prompt_tty(text):
+    return raw_input(text).decode("utf-8")
+
+def prompt_no_tty(text):
+    return raw_input().decode("utf-8")
+    
+def message_tty(*args):
+    print u" ".join(args)
+
+def message_no_tty(*args):
+    pass
+
+def run():
+    prompt, message = (prompt_tty, message_tty) if sys.stdin.isatty() else (prompt_no_tty, message_no_tty)
+    def_re = re.compile(r"^(%s)\s*=\s*(%s|%s)$" % (ATOM_RE.pattern, TRUE, FALSE), re.UNICODE)
+    try:
+        message(u"Define atoms by entering lines of the form:")
+        message(u"    atomname = value")
+        message(u"where value is %s or %s. Enter a blank line when done." % (TRUE, FALSE))
+        env = {}
+        while True:
+            line = prompt(u"def> ").strip()
+            if line:
+                match = def_re.match(line)
+                if match != None:
+                    name = match.group(1)
+                    value = match.group(2) == TRUE
+                    env[name] = value
+                else:
+                    print >> sys.stderr, u"Invalid definition: %s" % line
+            else:
+                break
+        message(u"Now enter expressions such as:")
+        message(u"    %sa %s %sb %s c%s" % (NEGATION, CONJUNCTION, GROUP_OPEN, DISJUNCTION, GROUP_CLOSE))
+        message(u"to evaluate their truth values.")
+        while True:
+            line = prompt(u"eval> ")
+            if line.strip():
+                try:
+                    tokens = Peekable(tokenize(line))
+                    ast = parse_expr(tokens)
+                    truth = ast.evaluate(env)
+                    print TRUE if truth else FALSE
+                except TokenizationError, e:
+                    print >> sys.stderr, u"Tokenization error: %s" % e
+                except ParseError, e:
+                    print >> sys.stderr, u"Parse error: %s" % e
+                except KeyError, e:
+                    print >> sys.stderr, u"Undefined atom: %s" % e.message
+    except EOFError:
+        message()
+    except KeyboardInterrupt:
+        message()
+
+run()
