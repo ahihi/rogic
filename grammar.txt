@@ -1,0 +1,47 @@
+Expression grammar:
+
+expr = atom
+     | negation
+     | conjunction
+     | disjunction
+     | group
+atom = <alphanumeric string>
+negation = "¬", negation_sub
+negation_sub = atom
+             | negation
+             | group
+conjunction = conjunction_sub, "∧", conjunction_sub
+conjunction_sub = atom
+                | negation
+                | conjunction
+                | group
+disjunction = disjunction_sub, "∨", disjunction_sub
+disjunction_sub = atom
+                | negation
+                | disjunction
+                | group
+group = "(", expr, ")"
+
+Remove left recursion:
+
+expr = atom, expr_suf
+     | negation, expr_suf
+     | group, expr_suf
+atom = <alphanumeric string>
+expr_suf = conjunction_suf
+         | disjunction_suf
+negation = "¬", negation_sub
+negation_sub = atom
+             | negation
+             | group
+conjunction = atom, conjunction_suf
+            | negation, conjunction_suf
+            | group, conjunction_suf
+conjunction_suf = E
+                | "∧", conjunction
+disjunction = atom, disjunction_suf
+            | negation, disjunction_suf
+            | group, disjunction_suf
+disjunction_suf = E
+                | "∨", disjunction
+group = "(", expr, ")"
