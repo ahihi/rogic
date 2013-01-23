@@ -18,7 +18,3 @@ A recursive-descent parser and evaluator for propositional logic expressions, be
     eval> ¬a ∧ (b ∨ c)
     0
     eval> _
-
-## License
-
-Public domain!
